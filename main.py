@@ -1,10 +1,13 @@
 import os
 import logging
+import time
 
 from typing import Union, Optional
 
 from pynput import keyboard
 from pynput.keyboard import Key, KeyCode
+
+import playsound
 
 logger = logging.getLogger('refiner')
 logger.setLevel(logging.INFO)
@@ -20,6 +23,7 @@ class Dataset:
         self.path = path
         self.labels = os.listdir(path)
         self.samples = list()
+        self.finished = False
 
         self.load_dataset()
         self._current_sample = 0
@@ -62,8 +66,13 @@ class Dataset:
         logger.info(f'Current sample [{self._current_sample}]: {self.samples[self._current_sample]}')
         return True
 
-    def fetch_current_wav(self) -> str:
-        return self.samples[self._current_sample]
+    def fetch_wavs(self) -> Optional[str]:
+        while True:
+            if self._current_sample >= len(self.samples) or self.finished: return
+            logger.info(f'Showing [{self._current_sample}] {self.samples[self._current_sample]}')
+
+            yield self.samples[self._current_sample]
+            self._current_sample += 1
 
     def discard_current_wav(self):
         logger.info(f'If I could, I would discard {self.samples[self._current_sample]}')
@@ -72,12 +81,12 @@ class Dataset:
     def on_press(self, key):
         pass
 
-    def on_release(self, key: Union[Key, KeyCode, None]) -> Optional[bool]:
+    def on_release(self, key: Union[Key, KeyCode, None]) -> None:
         match key:
             case Key.left:      self.previous_wav()
-            case Key.right:     return self.next_wav()
-            case Key.delete:    return self.discard_current_wav()
-            case Key.esc:       return False
+            case Key.right:     self.next_wav()
+            case Key.delete:    self.discard_current_wav()
+            case Key.esc:       self.finished = True
 
 
 def main():
@@ -89,14 +98,14 @@ def main():
 
         dataset = Dataset(dataset_path)
 
-        with keyboard.Listener(
-                on_press=dataset.on_press,
-                on_release=dataset.on_release) as listener:
+        listener = keyboard.Listener(on_press=dataset.on_press, on_release=dataset.on_release)
+        listener.start()
 
-            listener.join()
+        for wav in dataset.fetch_wavs():
+            playsound.playsound(wav, block=True)
+            # time.sleep(2)
 
 
-    return
 
 
 if __name__ == '__main__':
