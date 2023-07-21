@@ -55,27 +55,41 @@ class Dataset:
             return False
 
         self._current_sample += 1
-        logger.info(f'Current sample [{self._current_sample}]: {self.samples[self._current_sample]}')
         return True
 
     def previous_wav(self) -> bool:
-        if self._current_sample <= 0:
+        if self._current_sample < 0:
             return False
 
         self._current_sample -= 1
-        logger.info(f'Current sample [{self._current_sample}]: {self.samples[self._current_sample]}')
         return True
 
     def fetch_wavs(self) -> Optional[str]:
         while True:
             if self._current_sample >= len(self.samples) or self.finished: return
-            logger.info(f'Showing [{self._current_sample}] {self.samples[self._current_sample]}')
 
+            sample_name = self.samples[self._current_sample].split(os.path.sep)[-1]
+            logger.info(f'Current sample [{self._current_sample}]: {sample_name}')
             yield self.samples[self._current_sample]
-            self._current_sample += 1
 
     def discard_current_wav(self):
-        logger.info(f'If I could, I would discard {self.samples[self._current_sample]}')
+        sample_to_discard = self.samples[self._current_sample]
+        logger.info(f'Discarding {sample_to_discard}')
+
+        sample_sub_path = sample_to_discard.split('input')[-1]
+        separated_path = sample_sub_path.split(os.path.sep)
+        sample_name = separated_path[-1]
+        sample_folders = separated_path[1:-1]
+
+        new_path = 'rejections'
+        for sub_folder in sample_folders:
+            new_path = os.path.join(new_path, sub_folder)
+            if not os.path.exists(new_path):
+                os.mkdir(new_path)
+
+        new_path = os.path.join(new_path, sample_name)
+        os.rename(sample_to_discard, new_path)
+
         return len(self.samples) != 0
 
     def on_press(self, key):
@@ -103,9 +117,9 @@ def main():
 
         for wav in dataset.fetch_wavs():
             playsound.playsound(wav, block=True)
+            time.sleep(0.5)
+            dataset.next_wav()
             # time.sleep(2)
-
-
 
 
 if __name__ == '__main__':
