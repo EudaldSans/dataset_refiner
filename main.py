@@ -10,7 +10,8 @@ from pynput import keyboard
 from pynput.keyboard import Key, KeyCode
 
 import playsound
-import whisper
+# import whisper
+from faster_whisper import WhisperModel
 
 logger = logging.getLogger('refiner')
 logger.setLevel(logging.INFO)
@@ -20,7 +21,7 @@ handler = logging.StreamHandler()
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 
-model = whisper.load_model('small')
+model = WhisperModel('small', compute_type='int8', device='cpu')
 
 
 class Dataset:
@@ -113,6 +114,14 @@ class Dataset:
             case Key.delete:    self.discard_current_wav('manual')
             case Key.esc:       self.finished = True
 
+    def set_position(self, new_position: int) -> bool:
+        if new_position >= len(self.samples): return False
+        if new_position == 0: return False
+
+        self._current_sample = new_position
+
+        return True
+
 
 def manual_refinement(dataset: Dataset):
     listener = keyboard.Listener(on_press=dataset.on_press, on_release=dataset.on_release)
@@ -130,21 +139,23 @@ def whisper_refinement(dataset: Dataset):
 
         wav_name = wav.split(os.path.sep)[-1]
 
-        result = model.transcribe(wav, verbose=False, word_timestamps=True, fp16=False, language='English')
+        result, _ = model.transcribe(wav, word_timestamps=True, language='en', vad_filter=True)
+        time.sleep(0.2)
 
-        segments = result['segments']
+        segments = list(result)
+        # segments = result['segments']
         if len(segments) != 1:
             logger.info(f'Discarding {wav_name}, incorrect number of segments {len(segments)}')
             dataset.discard_current_wav('automatic')
             continue
 
-        words = segments[0]['words']
+        words = segments[0].words
         if len(words) != 1:
             logger.info(f'Discarding {wav_name}, incorrect number of words {len(words)}')
             dataset.discard_current_wav('automatic')
             continue
 
-        word = words[0]['word']
+        word = words[0].word
         word = word.lower().strip()
         word = word.translate(str.maketrans('', '', string.punctuation))
 
